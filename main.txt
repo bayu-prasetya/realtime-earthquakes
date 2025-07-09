@@ -1,0 +1,89 @@
+"""
+main.py
+
+Main ETL pipeline for earthquake data from USGS API to BigQuery.
+Supports both real-time (last 24 hours) and historical daily fetch.
+
+Author: [Your Name]
+Created: 2025-07-06
+"""
+
+import os
+import argparse
+import logging
+from datetime import datetime
+
+from etl.extract import (
+    fetch_earthquake_all_day,
+    fetch_earthquake_historical_daily
+)
+from etl.transform import clean_earthquake_data, enrich_earthquake_data
+from etl.load import upload_to_bigquery
+
+# === Logging Setup ===
+log_dir = "logs"
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, f"etl_log_{datetime.now().strftime('%Y%m%d')}.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+
+
+def run_pipeline(mode="replace", start_date=None, end_date=None):
+    """
+    Run the ETL pipeline with configurable mode.
+
+    Parameters:
+        mode (str): 'realtime' or 'historical'
+        start_date (str): (for historical) in 'YYYY-MM-DD'
+        end_date (str): (for historical) in 'YYYY-MM-DD'
+    """
+
+    logging.info(f"🚀 Starting ETL pipeline in mode: {mode.upper()}")
+
+    # === 1. Extract ===
+    if mode == "realtime":
+        df_raw = fetch_earthquake_all_day()
+    elif mode == "historical":
+        if not start_date or not end_date:
+            logging.error("start_date and end_date are required for historical mode.")
+            return
+        df_raw = fetch_earthquake_historical_daily(start_date, end_date)
+    else:
+        logging.error("Invalid mode. Choose 'realtime' or 'historical'.")
+        return
+
+    if df_raw.empty:
+        logging.warning("No data fetched. Exiting pipeline.")
+        return
+    logging.info(f"Extracted {len(df_raw)} rows")
+
+    # === 2. Transform ===
+    df_cleaned = clean_earthquake_data(df_raw)
+    df_final = enrich_earthquake_data(df_cleaned)
+    logging.info(f"Transformed data shape: {df_final.shape}")
+
+    # === 3. Load ===
+    PROJECT_ID = "your-gcp-project-id"
+    TABLE_ID = "earthquake_data.historical_events"
+    CREDENTIALS_PATH = "config/service_account.json"
+
+    upload_to_bigquery(
+        df=df_final,
+        table_id=TABLE_ID,
+        project_id=PROJECT_ID,
+        credentials_path=CREDENTIALS_PATH,
+        if_exists="replace"
+    )
+
+    logging.info("ETL pipeline completed successfully")
+
+
+if __name__ == "__main__":
+    run_pipeline(mode=args.mode)
