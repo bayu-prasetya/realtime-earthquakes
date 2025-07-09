@@ -77,8 +77,8 @@ def run_pipeline(mode="replace"):
         )
 
         logging.info("ETL pipeline completed successfully")
-    except:
-        logging.error("ETL pipeline failed")
+    except Exception as e:
+        logging.error(f"ETL pipeline failed {e}")
 
 
 if __name__ == "__main__":
