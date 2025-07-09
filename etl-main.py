@@ -36,7 +36,7 @@ logging.basicConfig(
     ]
 )
 
-@flow(name="ETL Pipeline")
+@flow(name="ETL Pipeline", log_prints=True)
 def run_pipeline(mode="replace"):
     """
     Run the ETL pipeline with configurable mode.
